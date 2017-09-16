@@ -4,10 +4,11 @@ If you are using [Amazon Mastercard](https://www.amazon.co.jp/MasterCard_%E3%83%
 ## Detail
 Lets say you have these conditions.
 
-|||
+|Content|Value|
 |---|---|
 |Total purchase price|`¥2199`|
 |Point rate|`2.5%` (Amazon Mastercard Gold)|
+
 The point you get is calculated as follows.  
 ```js
 Math.ceil(2199 * 2.5%) = 55
@@ -19,4 +20,5 @@ Math.ceil((2199 - 38) * 2.5%) = 55
 // Point rate is 55 / (2199 - 38) ≈ 2.545%
 ```
 The script automatically does this calculation and fills the adjusted point in the form. You just need to click the apply button if you want to.
-![](amazon.png)
+
+<img src="amazon.png" width="640" />
