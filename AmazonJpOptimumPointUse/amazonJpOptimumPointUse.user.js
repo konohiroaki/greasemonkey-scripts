@@ -15,7 +15,9 @@ waitForKeyElements("#spc-loyalty-points-input", main);
 waitForKeyElements("#loyalty-points-button[style='display: none;']", resetButton);
 
 function main() {
-    var pointRate = 0.025; // assume Amazon Gold Card
+    // Assumes Amazon Mastercard Gold.
+    // Need to be "0.015" if Amazon Mastercard Classic.
+    var pointRate = 0.025;
 
     var price = $("#spc-form-inputs > input[name='purchaseTotal']").val();
     var availablePoint = $("#loyalty-points-hidden-fields > input[name='jpPointsAvailablePoints']").val();
