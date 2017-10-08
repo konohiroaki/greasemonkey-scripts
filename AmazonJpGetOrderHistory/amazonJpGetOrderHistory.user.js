@@ -12,7 +12,6 @@
 waitForKeyElements("#searchForm", appendForm);
 
 function main(year, detailFlag) {
-//    getOrderHistory(["2007", "2008", "2012", "2014"]);
     var yearList = getYearList();
     if(!!year) {
         if(yearList.includes(year)){
@@ -49,17 +48,17 @@ function appendForm() {
     $("#searchForm").parent().parent().parent().after(`
 <div class="a-row">
     <div class="a-column a-span6 a-span-last">
-        <form id="fetch-order-history-form">
-            <input id="fetch-order-history-year" type="text" placeholder="yyyy (空なら全期間)" pattern="[0-9]{4}" maxLength="4">
-            <input id="fetch-order-history-detail-flag" type="checkbox">詳しく
-            <input id="fetch-order-history-button" type="submit" value="CSVダウンロード">
+        <form id="get-order-history-form">
+            <input id="get-order-history-year" type="text" placeholder="yyyy (空なら全期間)" pattern="[0-9]{4}" maxLength="4">
+            <input id="get-order-history-detail-flag" type="checkbox">詳しく
+            <input id="get-order-history-button" type="submit" value="CSVダウンロード">
         </form>
     </div>
 </div>
     `);
-    $("#fetch-order-history-form").submit(function() {
+    $("#get-order-history-form").submit(function() {
         event.preventDefault();
-        main($("#fetch-order-history-year").val(), $("#fetch-order-history-flag").prop("checked"));
+        main($("#get-order-history-year").val(), $("#get-order-history-flag").prop("checked"));
     });
 }
 
@@ -73,20 +72,20 @@ function getYearList() {
 }
 
 function getOrderHistory(yearList, detailFlag) {
-    var pageList = [], order = [], detail = [];
+    var pageList = [], orderList = [], detailList = [];
     $.when.apply(null,  getYearRequestList(yearList, pageList))
     .then(function() {
-        $.when.apply(null, getPageRequestList(pageList, order))
+        $.when.apply(null, getPageRequestList(pageList, orderList))
         .then(function() {
-            sortByDate(order);
+            sortByDate(orderList);
             if(detailFlag) {
-                $.when.apply(null,  getDetailRequestList(order, detail))
+                $.when.apply(null,  getOrderRequestList(orderList, detailList))
                 .then(function() {
                     // a
                 });
             } else {
-                download(order)
-//                console.table(order);
+                download(orderList)
+//                console.table(orderList);
             }
         });
     });
@@ -107,7 +106,7 @@ function getYearRequestList(yearList, pageList) {
     return list;
 }
 
-function getPageRequestList(pageList, order) {
+function getPageRequestList(pageList, orderList) {
     var list = [];
     $.each(pageList, function(i, page) {
         list.push($.ajax({
@@ -116,13 +115,13 @@ function getPageRequestList(pageList, order) {
               xhr.setRequestHeader("X-Requested-With", {toString: function() {return "";}});
             }
         }).done(function(data){
-            order.push.apply(order, getOrderList(data));
+            orderList.push.apply(orderList, getOrderList(data));
         }));
     });
     return list;
 }
 
-function getDetailRequestList() {
+function getOrderRequestList(orderList, detailList) {
     var list = [];
 
     return list;
