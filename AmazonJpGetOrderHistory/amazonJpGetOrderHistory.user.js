@@ -11,17 +11,146 @@
 
 waitForKeyElements("#searchForm", appendForm);
 
-function main(year, detailFlag) {
+function appendForm() {
+    $("#searchForm").parent().parent().parent().after(`
+<div class="a-row">
+    <div class="a-column a-span6 a-span-last">
+        <form id="get-order-history-form">
+            <input id="get-order-history-year" type="text" placeholder="yyyy (空なら全期間)" pattern="[0-9]{4}" maxLength="4">
+            <input id="get-order-history-button" type="submit" value="CSVダウンロード">
+        </form>
+    </div>
+</div>
+    `);
+    $("#get-order-history-form").submit(function() {
+        event.preventDefault();
+        main($("#get-order-history-year").val());
+    });
+}
+
+function main(year) {
     var yearList = getYearList();
     if(!!year) {
         if(yearList.includes(year)){
-            getOrderHistory([year], detailFlag);
+            getOrderHistory([year]);
         } else {
             alert("no order for that year");
         }
     } else {
-        getOrderHistory(yearList, detailFlag);
+        getOrderHistory(yearList);
     }
+}
+
+function getYearList() {
+   var list = [];
+   $.each($("[id^=orderFilterEntry-year-]"), function(i, val) {
+       var text = $(val).text().trim();
+       list.push(text.substr(0, 4));
+   });
+   return list;
+}
+
+function getOrderHistory(yearList) {
+    var pageList = [], purchaseList = [], orderInfoList = [];
+    $.when.apply(null,  getYearRequestList(yearList, pageList))
+    .then(function() { // created page list
+        $.when.apply(null, getPageRequestList(pageList, purchaseList, orderInfoList))
+        .then(function() { // created most data but need to finalize with detail access for some orders.
+            $.when.apply(null,  getOrderRequestList(orderInfoList, purchaseList))
+            .then(function() {
+                sortByDate(purchaseList);
+                download(purchaseList);
+//                console.table(purchaseList);
+            });
+        });
+    });
+}
+
+function getYearRequestList(yearList, pageList) {
+    var list = [];
+    $.each(yearList, function(i, year) {
+        list.push(createAjaxRequest("/gp/your-account/order-history/?orderFilter=year-" + year, function(data) {
+          pageList.push.apply(pageList, getPageList(data, year));
+        }));
+    });
+    return list;
+}
+
+function getPageList(html, year) {
+    var list = [];
+    var lastIdx = (parseInt($(html).find("ul.a-pagination li.a-normal:last a").text()) - 1) * 10;
+    if(isNaN(lastIdx)) {
+        lastIdx = 0;
+    }
+    for(var idx = lastIdx; idx >= 0; idx -= 10) {
+        list.push("/gp/your-account/order-history/?orderFilter=year-" + year + "&startIndex=" + idx);
+    }
+    return list;
+}
+
+function getPageRequestList(pageList, purchaseList, orderInfoList) {
+    var list = [];
+    $.each(pageList, function(i, page) {
+        list.push(createAjaxRequest(page, function(data) {
+            fillList(data, purchaseList, orderInfoList);
+        }));
+    });
+    return list;
+}
+
+function fillList(html, purchaseList, orderInfoList) {
+    var orderList = $(html).find(".order");
+    $.each(orderList, function(i, order){
+        var values = $(order).find(".order-info .a-color-secondary.value");
+        var orderInfo = {
+            "id": values[2].innerText.trim(),
+            "date": fillZero(values[0].innerText.replace(/[年月]/g,"-").replace("日","").trim()),
+            "price": values[1].innerText.replace(/[￥,]/g,"").trim()
+        };
+
+        if($(order).find(".shipment .a-fixed-right-grid:contains('すべての商品を表示')").length) {
+            orderInfoList.push(orderInfo);
+        } else {
+            purchaseList.push.apply(purchaseList, getPurchaseItemList(order, orderInfo));
+        }
+    });
+}
+
+function getPurchaseItemList(html, orderInfo) {
+    var list = [];
+    var itemList = $(html).find(".shipment .a-fixed-left-grid");
+    $.each(itemList, function(i, item) {
+        var detail = $(item).find(".a-fixed-left-grid-col.a-col-right > .a-row");
+        list.push({
+            "id": orderInfo.id,
+            "date": orderInfo.date,
+            "name": detail[0].innerText.trim().replace(/^商品名：|、数量：\d+$|,/g,"").split("\n")[0],
+            "url": "https://www.amazon.co.jp" + $(detail[0]).find("a").attr("href").split("ref=")[0],
+            "seller": detail.find("span:contains('販売: ')").text().trim().replace(/^販売:|,/g,"").trim().trim().split("\n")[0],
+            "unitPrice": detail.find("span:contains('￥ ')").text().replace(/[￥,]/g,"").trim(),
+            "quantity": $(item).find(".item-view-qty").text().trim() || "1",
+            "orderPrice": orderInfo.price
+        });
+    });
+    return list;
+}
+
+function getOrderRequestList(orderInfoList, purchaseList) {
+    var list = [];
+    $.each(orderInfoList, function(i, orderInfo) {
+        list.push(createAjaxRequest("/gp/your-account/order-details/?orderID=" + orderInfo.id, function(data) {
+          purchaseList.push.apply(purchaseList, getPurchaseItemList(data, orderInfo));
+        }));
+    });
+    return list;
+}
+
+function createAjaxRequest(url, doneFunc) {
+    return $.ajax({
+        url: url,
+        // remove "X-Requested-With: XMLHttpRequest" header.
+        beforeSend: function(xhr) {xhr.setRequestHeader("X-Requested-With", {toString: function() {return "";}});}
+    }).done(doneFunc);
 }
 
 function download(history) {
@@ -44,117 +173,6 @@ function createCSV(history) {
     return header + body;
 }
 
-function appendForm() {
-    $("#searchForm").parent().parent().parent().after(`
-<div class="a-row">
-    <div class="a-column a-span6 a-span-last">
-        <form id="get-order-history-form">
-            <input id="get-order-history-year" type="text" placeholder="yyyy (空なら全期間)" pattern="[0-9]{4}" maxLength="4">
-            <input id="get-order-history-detail-flag" type="checkbox">詳しく
-            <input id="get-order-history-button" type="submit" value="CSVダウンロード">
-        </form>
-    </div>
-</div>
-    `);
-    $("#get-order-history-form").submit(function() {
-        event.preventDefault();
-        main($("#get-order-history-year").val(), $("#get-order-history-flag").prop("checked"));
-    });
-}
-
-function getYearList() {
-   var list = [];
-   $.each($("[id^=orderFilterEntry-year-]"), function(i, val) {
-       var text = $(val).text().trim();
-       list.push(text.substr(0, 4));
-   });
-   return list;
-}
-
-function getOrderHistory(yearList, detailFlag) {
-    var pageList = [], orderList = [], detailList = [];
-    $.when.apply(null,  getYearRequestList(yearList, pageList))
-    .then(function() {
-        $.when.apply(null, getPageRequestList(pageList, orderList))
-        .then(function() {
-            sortByDate(orderList);
-            if(detailFlag) {
-                $.when.apply(null,  getOrderRequestList(orderList, detailList))
-                .then(function() {
-                    // a
-                });
-            } else {
-                download(orderList)
-//                console.table(orderList);
-            }
-        });
-    });
-}
-
-function getYearRequestList(yearList, pageList) {
-    var list = [];
-    $.each(yearList, function(i, year) {
-        list.push($.ajax({
-          url: "/gp/your-account/order-history/?orderFilter=year-" + year,
-          beforeSend: function(xhr) {
-              xhr.setRequestHeader("X-Requested-With", {toString: function() {return "";}});
-          }
-        }).done(function(data){
-            pageList.push.apply(pageList, getPageList(data, year));
-        }));
-    });
-    return list;
-}
-
-function getPageRequestList(pageList, orderList) {
-    var list = [];
-    $.each(pageList, function(i, page) {
-        list.push($.ajax({
-            url: page,
-            beforeSend: function(xhr) {
-              xhr.setRequestHeader("X-Requested-With", {toString: function() {return "";}});
-            }
-        }).done(function(data){
-            orderList.push.apply(orderList, getOrderList(data));
-        }));
-    });
-    return list;
-}
-
-function getOrderRequestList(orderList, detailList) {
-    var list = [];
-
-    return list;
-}
-
-function getPageList(html, year) {
-    var list = [];
-    var lastIdx = (parseInt($(html).find("ul.a-pagination li.a-normal:last a").text()) - 1) * 10;
-    if(isNaN(lastIdx)) {
-        lastIdx = 0;
-    }
-    for(var idx = lastIdx; idx >= 0; idx -= 10) {
-        // e.g. https://www.amazon.co.jp/gp/your-account/order-history/?orderFilter=year-2017&startIndex=80
-        list.push("/gp/your-account/order-history/?orderFilter=year-" + year + "&startIndex=" + idx);
-    }
-    return list;
-}
-
-function getOrderList(html) {
-    var list = [];
-    var loop = $(html).find(".a-fixed-right-grid:not([class*=a-spacing-top-])");
-    $.each(loop, function(i, val) {
-        var values = $(val).find(".a-color-secondary.value");
-        var date = values[0].innerText.replace(/[年月]/g,"-").replace("日","").trim();
-        list.push({
-            "id"    : values[2].innerText.trim(),
-            "date"  : fillZero(values[0].innerText.replace(/[年月]/g,"-").replace("日","").trim()),
-            "price" : values[1].innerText.replace(/[￥,]/g,"").trim()
-        });
-    });
-    return list;
-}
-
 function fillZero(date) {
     var list = date.split("-");
     for(var i=1; i<list.length; i++){
@@ -169,6 +187,8 @@ function sortByDate(data) {
     data.sort(function(a, b) {
         if(a.date < b.date) return -1;
         if(a.date > b.date) return 1;
+        if(a.name < b.name) return -1;
+        if(a.name > b.name) return 1;
         return 0;
     });
 }
