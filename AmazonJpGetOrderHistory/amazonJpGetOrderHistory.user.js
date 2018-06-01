@@ -22,7 +22,7 @@ function appendForm() {
     </div>
 </div>
     `);
-    $("#get-order-history-form").submit(function() {
+    $("#get-order-history-form").submit(function(event) {
         event.preventDefault();
         main($("#get-order-history-year").val());
     });
